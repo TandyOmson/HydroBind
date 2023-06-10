@@ -87,15 +87,19 @@ class ChemistrySimulator:
         molgen_choice, conformeroutdir = self.config.get_molgen_config()
         if steps["molgen"]:
 
-            # Apply directly to dataframe (switch to apply method later?)
-            # Or batch into a dataframe and then concat with dataframe
-            # + throughout!
-            df['guestmol'] = None
-            for i in range(batchsize):
-                df['guestmol'][i] = self.model_gen(molgen_choice,df['SMILES'][i],df.index[i],outdir=conformeroutdir,axis=1)
+            # Df starts with index: MolID; columns: PubChemID, SMILES
+            batch = df["SMILES"].iloc[:batchsize]
 
-            if conformeroutdir:
-                df.to_pickle(conformeroutdir + "/conformerdf.pkl")
+            # Generate conformers
+            conformers = []
+            for i in range(batchsize):
+                conformers.append({"MolID":df.index[i],"guestmol":self.model_gen(molgen_choice,batch[i],df.index[i],outdir=conformeroutdir)})
+        
+            conformers = pd.DataFrame(conformers)
+            conformers.set_index("MolID",inplace=True)
+
+            df = pd.concat([df,conformers],axis=1)
+            df.to_pickle(conformeroutdir + "/conformerdf.pkl")
 
         # OPTIMISATION
         # ================================================================
@@ -111,15 +115,22 @@ class ChemistrySimulator:
             if not self.host_optimised:
                 pass
 
-            # Optimise guest
-            for i in range(batchsize):
-                if df['guestmol'][i] != "InvalidSMILES":
-                    df['guestmol'][i] = self.optimise(opt_choice,df['guestmol'][i],df.index[i],inp,outdir=conformeroutdir)
-                else:
-                    df['guestmol'][i] = "InvalidSMILES"
+            # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
+            batch = df["guestmol"].iloc[:batchsize]
 
-            if conformeroutdir:
-                df.to_pickle(conformeroutdir + "/conformerdf.pkl")
+            # Optimise guest
+            optguests = []
+            for i in range(batchsize):
+                if batch[i] != "InvalidSMILES":
+                    optguests.append({"MolId":df.index[i],"guestmol":self.optimise(opt_choice,batch[i],df.index[i],inp,outdir=conformeroutdir)})
+                else:
+                    optguests.append({"MolId":df.index[i],"guestmol":"InvalidSMILES"})
+
+            optguests = pd.DataFrame(optguests)
+            optguests.set_index("MolId",inplace=True)
+            
+            df.update(optguests)
+            df.to_pickle(conformeroutdir + "/conformerdf.pkl")
 
         # DOCKING
         # ================================================================
@@ -128,16 +139,22 @@ class ChemistrySimulator:
 
             hostfile = f"{hostdir}/xtbopt.pdb"
 
-            # Dock guest to host
-            df['dockedmol'] = None
-            for i in range(batchsize):
-                if df['guestmol'][i] != "InvalidSMILES":
-                    df['dockedmol'][i] = self.docking(docking_choice,df['guestmol'][i],df.index[i],hostfile,inp,outdir=dockingoutdir)
-                else:
-                    df['dockedmol'][i] = "InvalidSMILES"
+            # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
+            batch = df["guestmol"].iloc[:batchsize]
 
-            if dockingoutdir:
-                df.to_pickle(dockingoutdir + "/dockingdf.pkl")
+            # Dock guest to host
+            complexes = []
+            for i in range(batchsize):
+                if batch[i] != "InvalidSMILES":
+                    complexes.append({"MolId":df.index[i],"dockedmol":self.dock(docking_choice,batch[i],df.index[i],hostfile,None,outdir=dockingoutdir)})
+                else:
+                    complexes.append({"MolId":df.index[i],"dockedmol":"InvalidSMILES"})
+
+            complexes = pd.DataFrame(complexes)
+            complexes.set_index("MolId",inplace=True)
+
+            df = pd.concat([df,complexes],axis=1)
+            df.to_pickle(dockingoutdir + "/dockingdf.pkl")
 
     # Run through a single piece of data and return a single piece of data (for integration into MCTS)
     def run_piecewise(self):
