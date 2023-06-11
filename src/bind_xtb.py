@@ -64,7 +64,7 @@ def get_binding_from_outfile(outfile,molId):
 
     return en_dict
 
-def bind(complexmol,molId,hostoutfile,xtbinp,**kwargs):
+def bind(complexmol,guestmol,molId,hostoutfile,xtbinp,**kwargs):
     """ calculates binding affinity of a given complex using xTB
     kwargs include both the optional outdir and optional guestoutfile (output from guest optimisation)
     if notguestoutfile, then the guestpdb is given.
@@ -73,7 +73,7 @@ def bind(complexmol,molId,hostoutfile,xtbinp,**kwargs):
     # Gets a breakdown of xTB energies, returns it as a dictionary. Requires outfiles from complex, guest and host SCFs
     
     # xTB on complex
-    if not kwargs["guestoutfile"] or kwargs["complexoutfile"]:
+    if not kwargs["guestoutfile"] or not kwargs["complexoutfile"]:
         complexoutfile = f"{molId}_comp_opt.out"
         Chem.MolToPDBFile(complexmol,f"{molId}_comp.pdb")
         ammend_pdb_spacing(f"{molId}_comp.pdb")
@@ -82,6 +82,7 @@ def bind(complexmol,molId,hostoutfile,xtbinp,**kwargs):
         complexmol_final = Chem.MolFromPDBFile("xtbopt.pdb",removeHs=False,sanitize=False)
 
         guestoutfile = f"{molId}_opt.out"
+        Chem.MolToPDBFile(guestmol,f"{molId}_guest.pdb")
         sp.run(["xtb","--input",f"{xtbinp}",f"{kwargs['guestpdb']}","--opt","--alpb","water"],stdout=open(guestoutfile,"w"))
         # Get final mol object for guest
         guestmol_final = Chem.MolFromPDBFile("xtbopt.pdb",removeHs=False,sanitize=False)
@@ -104,7 +105,7 @@ def bind(complexmol,molId,hostoutfile,xtbinp,**kwargs):
                     }
 
     # Move outfiles to outdir if given
-    if not kwargs["guestoutfile"] or kwargs["complexoutfile"]:
+    if not kwargs["guestoutfile"] or not kwargs["complexoutfile"]:
 
         if kwargs.get('outdir'):
             sp.run(["mv",complexoutfile,kwargs['outdir']])
@@ -120,7 +121,10 @@ def bind(complexmol,molId,hostoutfile,xtbinp,**kwargs):
         sp.run(["rm",".xtboptok"])
         sp.run(["rm","charges"])
 
-    return complexmol_final, guestmol_final, binding_dict
+    if not kwargs["guestoutfile"] or not kwargs["complexoutfile"]:
+        return complexmol_final, guestmol_final, binding_dict
+    else:
+        return binding_dict
 
 # To move to test
 if __name__ == "__main__":
