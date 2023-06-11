@@ -21,6 +21,6 @@ def opt(mol,molId,outfile,optfile,inp):
     sp.run(["rm","xtbopt.log"])
     sp.run(["rm",".xtboptok"])
 
-    guestmol = Chem.MolFromPDBFile(f"{optfile}",removeHs=False,sanitize=False)
+    mol = Chem.MolFromPDBFile(f"{optfile}",removeHs=False,sanitize=False)
 
-    return guestmol
+    return mol

@@ -10,7 +10,7 @@ from sklearn.decomposition import PCA
 import numpy as np
 from mol_ops import xyz_to_mol
 
-def dock(mol,molID,hosttopo,dockoutfile,posefile):
+def dock(mol,molID,hosttopo,dockoutfile,posefile,inp):
 
     # Align host and guest axis
     # Get coordinates of guest
@@ -74,7 +74,7 @@ def dock(mol,molID,hosttopo,dockoutfile,posefile):
     en = ff.CalcEnergy()
 
     # Write out the docked molecule
-    Chem.MolToXYZFile(complexmol,dockoutfile)
+    Chem.MolToXYZFile(complexmol,posefile)
 
     # Read in docked guest from .xyz file with formatted residues
     mol = xyz_to_mol(dockoutfile)
