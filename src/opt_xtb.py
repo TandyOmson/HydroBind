@@ -4,9 +4,12 @@
 import subprocess as sp
 from rdkit import Chem
 
-def opt(mol,molId,outfile,optfile,inp):
+def opt(mol,molId,inp):
     """ optimises a given molecule using xTB """
     infile = f"{molId}.pdb"
+    outfile = f"{molId}_opt.out"
+    optfile = f"{molId}_opt.pdb"
+
     Chem.MolToPDBFile(mol,f"{infile}")
     print("Command: xtb --input",f"{inp}",f"{infile}","--opt","--alpb","water",">",f"{outfile}")
     sp.run(["xtb","--input",f"{inp}",f"{infile}","--opt","--alpb","water"],stdout=open(outfile,"w"))

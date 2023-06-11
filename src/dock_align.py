@@ -10,7 +10,11 @@ from sklearn.decomposition import PCA
 import numpy as np
 from mol_ops import xyz_to_mol
 
-def dock(mol,molID,hosttopo,dockoutfile,posefile,inp):
+def dock(mol,molId,hostfile,inp):
+    """ Dock a molecule into a host"""
+
+    dockoutfile = f"{molId}_dock.out"
+    posefile = f"{molId}_complex.pdb"
 
     # Align host and guest axis
     # Get coordinates of guest
@@ -19,7 +23,7 @@ def dock(mol,molID,hosttopo,dockoutfile,posefile,inp):
     guest_atoms = [atm.GetSymbol() for atm in mol.GetAtoms()]
     guest_coords = np.array([mol.GetConformer().GetAtomPosition(atm.GetIdx()) for atm in mol.GetAtoms()])
 
-    hostmol = Chem.MolFromPDBFile(hosttopo,removeHs=False,sanitize=False)
+    hostmol = Chem.MolFromPDBFile(hostfile,removeHs=False,sanitize=False)
     host_coords = np.array([hostmol.GetConformer().GetAtomPosition(atm.GetIdx()) for atm in hostmol.GetAtoms() if atm.GetAtomicNum() != 1])
 
     #add clouds of points around the atoms of the guest molecule, 3 sections in polar (theta) and 6 in azimuthal (phi)
@@ -72,12 +76,16 @@ def dock(mol,molID,hosttopo,dockoutfile,posefile,inp):
     ff.Initialize()
     cf = ff.Minimize(maxIts=n_steps,energyTol=tol,forceTol=tol)
     en = ff.CalcEnergy()
+    with open(dockoutfile,'w') as f:
+        f.write(f"{cf}\n")
+        f.write(f"{en}\n")
 
     # Write out the docked molecule
-    Chem.MolToXYZFile(complexmol,posefile)
+    Chem.MolToXYZFile(complexmol,"pose.xyz")
 
     # Read in docked guest from .xyz file with formatted residues
-    mol = xyz_to_mol(dockoutfile)
+    mol = xyz_to_mol("pose.xyz")
+    Chem.MolToPDBFile(mol,posefile)
 
     return mol
 

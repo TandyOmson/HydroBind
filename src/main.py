@@ -3,12 +3,16 @@
 # ============================================================================
 # Author(s): Andy Thomson
 # Configuration is changed via the flags and options in config.ini
+# run() handles data in and out
+# class methods handle module imports and running
 
 import configparser
 import importlib
 import pandas as pd
 from collections import OrderedDict
 import subprocess as sp
+
+from prog_ops import delete_and_create_dir
 
 # Configuration manager class
 class ConfigManager:
@@ -106,13 +110,15 @@ class ChemistrySimulator:
             # Df starts with index: MolID; columns: PubChemID, SMILES
             batch = df["SMILES"].iloc[:batchsize]
 
+            delete_and_create_dir(f"{conformeroutdir}/confs")
+
             # Generate conformers
             conformers = []
             for i in range(batchsize):
                 conformer = self.model_gen(molgen_choice,
                                            batch[i],
                                            df.index[i],
-                                           outdir=conformeroutdir
+                                           outdir=f"{conformeroutdir}/confs"
                                            )
                 conformers.append({"MolID":df.index[i],"guestmol":conformer})
         
@@ -130,6 +136,8 @@ class ChemistrySimulator:
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
             batch = df["guestmol"].iloc[:batchsize]
 
+            delete_and_create_dir(f"{conformeroutdir}/opt")
+
             # Optimise guest
             optguests = []
             for i in range(batchsize):
@@ -138,7 +146,7 @@ class ChemistrySimulator:
                                              batch[i],
                                              df.index[i],
                                              inp,
-                                             outdir=conformeroutdir
+                                             outdir=f"{conformeroutdir}/opt"
                                              )
                     optguests.append({"MolId":df.index[i],"guestmol":optguest})
                 else:
@@ -160,6 +168,8 @@ class ChemistrySimulator:
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
             batch = df["guestmol"].iloc[:batchsize]
 
+            delete_and_create_dir(f"{dockingoutdir}/docked")
+
             # Dock guest to host
             complexes = []
             for i in range(batchsize):
@@ -169,7 +179,7 @@ class ChemistrySimulator:
                                          df.index[i],
                                          hostfile,
                                          None,
-                                         outdir=dockingoutdir
+                                         outdir=f"{dockingoutdir}/docked"
                                          )
                     complexes.append({"MolId":df.index[i],"dockedmol":compl})
                 else:
@@ -189,6 +199,8 @@ class ChemistrySimulator:
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol, dockedmol
             batch = df["dockedmol"].iloc[:batchsize]
 
+            delete_and_create_dir(f"{dockingoutdir}/complexopt")
+
             # Optimise complex
             optcomplexes = []
             for i in range(batchsize):
@@ -197,8 +209,8 @@ class ChemistrySimulator:
                                                batch[i],
                                                df.index[i],
                                                inp,
-                                               outdir=dockingoutdir
-                                                  )
+                                               outdir=f"{dockingoutdir}/complexopt"
+                                                )
                     optcomplexes.append({"MolId":df.index[i],"dockedmol":optcomplex})
                 else:
                     optcomplexes.append({"MolId":df.index[i],"dockedmol":"InvalidSMILES"})
@@ -327,61 +339,56 @@ class ChemistrySimulator:
             self.run_piecewise()
 
     # SMILES to 3D structure
-    def model_gen(self,method,smiles,molId,**kwargs):
+    def model_gen(self,method,smiles,molId,outdir):
         """ Steps: convert smiles to mol object
         Embed mol object to get 3D structure
         """
         module = importlib.import_module(f"molgen_{method}")
-        if not kwargs["outdir"]:
-            kwargs["outdir"] = None
-        mol = module.single_smiles(smiles,molId,outdir=kwargs["outdir"])
+        mol = module.mol_gen(smiles,molId)
+
+        # Files created:
+        #f"{molId}_rdkit.pdb"
+        #f"{molId}_reduced.pdb"
+
+        # Move files
+        sp.run["mv",f"{molId}_{method}.pdb",f"{outdir}/{molId}_{method}.pdb"]
+        sp.run["mv",f"{molId}_reduced.pdb",f"{outdir}/{molId}_reduced.pdb"]
 
         return mol
 
     # Guest and host optimisation
-    def optimise(self,method,mol,molId,inp,**kwargs):
+    def optimise(self,method,mol,molId,inp,outdir):
         """Steps: optimise guest with chosen ESM (electronic structure method) options
         Optimise host with chosen ESM options if host_optimsed is False
         """
         module = importlib.import_module(f"opt_{method}")
+        guestmol = module.opt(mol,molId,inp)
 
-        if not kwargs["outdir"]:
-            outfile = f"{molId}_opt.out"
-            optfile = f"{molId}_opt.pdb"
+        # Files created:
+        #f"{molId}_opt.out"
+        #f"{molId}_opt.pdb"
 
-        else:
-            outfile = kwargs["outdir"] + f"/{molId}_opt.out"
-            optfile = kwargs["outdir"] + f"/{molId}_opt.pdb"
+        # Move files
+        sp.run["mv",f"{molId}_opt.out",f"{outdir}/{molId}_opt.out"]
+        sp.run["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"]
             
-        guestmol = module.opt(mol,molId,outfile,optfile,inp)
-            
-        # Clean up files
-        if not kwargs["outdir"]:
-            sp.run(["rm",outfile,optfile])
-
         return guestmol
 
-    def docking(self,method,mol,molId,hostfile,inp,**kwargs):
+    def docking(self,method,mol,molId,hostfile,inp,outdir):
         """Steps: dock guest to host
         # optimise complex
         # optmiise guest if config is different
         """
         module = importlib.import_module(f"dock_{method}")
+        complexmol = module.dock(mol,molId,hostfile,inp)
 
-        if not kwargs["outdir"]:
-            dockoutfile = f"{molId}_dock.out"
-            posefile = f"{molId}_complex.pdb"
+        # Files created:
+        #f"{molId}_dock.out"
+        #f"{molId}_complex.pdb"
 
-        else:
-            dockoutfile = kwargs["outdir"] + f"/{molId}_dock.out"
-            posefile = kwargs["outdir"] + f"/{molId}_complex.xyz"
-
-        # This is xTB specific, will have to change
-        complexmol = module.dock(mol,molId,hostfile,dockoutfile,posefile,inp)
-
-        # Clean up
-        if not kwargs["outdir"]:
-            sp.run(["rm",dockoutfile,posefile])
+        # Move files
+        sp.run["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"]
+        sp.run["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"]
 
         return complexmol
 
