@@ -11,6 +11,7 @@ import importlib
 import pandas as pd
 from collections import OrderedDict
 import subprocess as sp
+import time
 
 from prog_ops import delete_and_create_dir
 
@@ -112,6 +113,7 @@ class ChemistrySimulator:
         # ================================================================
         molgen_choice, conformeroutdir = self.config.get_molgen_config()
         if steps["molgen"]:
+            starttime = time.time()
             self.config.print_config("MOLGEN")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES
@@ -135,10 +137,14 @@ class ChemistrySimulator:
             df = pd.concat([df,conformers],axis=1)
             df.to_pickle(conformeroutdir + "/conformerdf.pkl")
 
+            duration = time.time()-starttime
+            print("Conformer generation took {0:.3f} seconds {1:.3f} seconds per molecule".format(duration,duration/batchsize))
+
         # OPTIMISATION
         # ================================================================
         opt_choice, inp, hostdir = self.config.get_optimisation_config()
         if steps["optimisation"]:
+            starttime = time.time()
             self.config.print_config("OPTIMISATION")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
@@ -166,10 +172,14 @@ class ChemistrySimulator:
             df.update(optguests)
             df.to_pickle(conformeroutdir + "/conformerdf.pkl")
 
+            duration = time.time()-starttime
+            print("Optimisation took {0:.3f} seconds {1:.3f} seconds per molecule".format(duration,duration/batchsize))
+
         # DOCKING
         # ================================================================
         docking_choice, inp, dockingoutdir = self.config.get_docking_config()
         if steps["docking"]:
+            starttime = time.time()
             self.config.print_config("DOCKING")
 
             hostfile = f"{hostdir}/xtbopt.pdb"
@@ -200,10 +210,14 @@ class ChemistrySimulator:
             df = pd.concat([df,complexes],axis=1)
             df.to_pickle(dockingoutdir + "/dockingdf.pkl")
 
+            duration = time.time()-starttime
+            print("Docking took {0:.3f} seconds {1:.3f} seconds per molecule".format(duration,duration/batchsize))
+
         # COMPLEX OPTIMISATION
         # ================================================================
         opt_choice, inp, hostdir = self.config.get_optimisation_config()
         if steps["docking"]:
+            starttime = time.time()
             print("Optimising docked complexes...")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol, dockedmol
@@ -230,6 +244,9 @@ class ChemistrySimulator:
 
             df.update(optcomplexes)
             df.to_pickle(dockingoutdir + "/dockingdf.pkl")
+
+            duration = time.time()-starttime
+            print("Complex optimisation took {0:.3f} seconds {1:.3f} seconds per molecule".format(duration,duration/batchsize))
 
         # EXCLUSION COMPLEX
         # ================================================================
@@ -347,9 +364,9 @@ class ChemistrySimulator:
         pass
 
     def run(self):
-        batch = self.config.get_batchsize()
-        if batch != 1:
-            self.run_batchwise(batch)
+        batchsize = self.config.get_batchsize()
+        if batchsize != 1:
+            self.run_batchwise(batchsize)
         else:
             self.run_piecewise()
 
@@ -379,15 +396,19 @@ class ChemistrySimulator:
         Optimise host with chosen ESM options if host_optimsed is False
         """
         module = importlib.import_module(f"opt_{method}")
-        guestmol = module.opt(mol,molId,inp)
+        try:
+            guestmol = module.opt(mol,molId,inp)
 
-        # Files created:
-        #f"{molId}_opt.out"
-        #f"{molId}_opt.pdb"
+            # Files created:
+            #f"{molId}_opt.out"
+            #f"{molId}_opt.pdb"
 
-        # Move files
-        sp.run(["mv",f"{molId}_opt.out",f"{outdir}/{molId}_opt.out"])
-        sp.run(["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"])
+            # Move files
+            sp.run(["mv",f"{molId}_opt.out",f"{outdir}/{molId}_opt.out"])
+            sp.run(["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"])
+
+        except:
+            guestmol = "InvalidSMILES"
             
         return guestmol
 
@@ -397,15 +418,19 @@ class ChemistrySimulator:
         # optmiise guest if config is different
         """
         module = importlib.import_module(f"dock_{method}")
-        complexmol = module.dock(mol,molId,hostfile,inp)
+        try:
+            complexmol = module.dock(mol,molId,hostfile,inp)
 
-        # Files created:
-        #f"{molId}_dock.out"
-        #f"{molId}_complex.pdb"
+            # Files created:
+            #f"{molId}_dock.out"
+            #f"{molId}_complex.pdb"
 
-        # Move files
-        #sp.run(["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"])
-        sp.run(["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"])
+            # Move files
+            #sp.run(["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"])
+            sp.run(["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"])
+            
+        except:
+            complexmol = "InvalidSMILES"
 
         return complexmol
 
