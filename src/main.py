@@ -75,6 +75,12 @@ class ConfigManager:
         exclusioncomplexcheck = self.config.getboolean(section, "exclusioncomplexcheck")
         return conformercheck, bindingposecheck, exclusioncomplexcheck
 
+    def print_config(self,section,**kwargs):
+        """ Print configuration, kwargs gives checks or additional print info"""
+        print("=====================================")
+        print("PERFORMING:",section)
+        for key in self.config[section]:
+            print(key, self.config[section][key])
     
 class ChemistrySimulator:
     """Class for managing the chemistry simulation
@@ -91,6 +97,7 @@ class ChemistrySimulator:
 
         # Retrieve data
         df, stepflags = self.config.get_input_config()
+        print(self.config.print_config("INPUT"))
 
         # Check flags for checks
         conformercheck, bindingposecheck, exclusioncomplexcheck = self.config.get_checks_flags()
@@ -100,12 +107,12 @@ class ChemistrySimulator:
         for step in steps:
             if step in stepflags:
                 steps[step] = True
-                print("Running:",step)
 
         # MOL GENERATION
         # ================================================================
         molgen_choice, conformeroutdir = self.config.get_molgen_config()
         if steps["molgen"]:
+            self.config.print_config("MOLGEN")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES
             batch = df["SMILES"].iloc[:batchsize]
@@ -132,6 +139,7 @@ class ChemistrySimulator:
         # ================================================================
         opt_choice, inp, hostdir = self.config.get_optimisation_config()
         if steps["optimisation"]:
+            self.config.print_config("OPTIMISATION")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
             batch = df["guestmol"].iloc[:batchsize]
@@ -162,6 +170,7 @@ class ChemistrySimulator:
         # ================================================================
         docking_choice, inp, dockingoutdir = self.config.get_docking_config()
         if steps["docking"]:
+            self.config.print_config("DOCKING")
 
             hostfile = f"{hostdir}/xtbopt.pdb"
 
@@ -195,6 +204,7 @@ class ChemistrySimulator:
         # ================================================================
         opt_choice, inp, hostdir = self.config.get_optimisation_config()
         if steps["docking"]:
+            print("Optimising docked complexes...")
 
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol, dockedmol
             batch = df["dockedmol"].iloc[:batchsize]
@@ -224,6 +234,7 @@ class ChemistrySimulator:
         # EXCLUSION COMPLEX
         # ================================================================
         if exclusioncomplexcheck:
+            print("Checking for exclusion complexes...")
 
             batch = df["dockedmol"].iloc[:batchsize]
 
@@ -232,11 +243,12 @@ class ChemistrySimulator:
             for i in range(batchsize):
                 if batch[i] != "InvalidSMILES":
                     exo = {}
-                    isExo, centroid_diff, cavity_atoms = self.check_exclusion_complex(batch[i])
+                    isExo, centroid_diff, cavity_atoms = self.check_exclusion_complex(batch[i],df.index[i])
                     exo["isExo"] = isExo
                     exo["centroid_diff"] = centroid_diff
                     exo["cavity_atoms"] = cavity_atoms
-                    exclusioncomplexes.append({"MolId":df.index[i]}.update(exo))
+                    exo.update({"MolId":df.index[i]})
+                    exclusioncomplexes.append(exo)
                 else:
                     exclusioncomplexes.append({"MolId":df.index[i],"isExo":"InvalidSMILES"})
 
@@ -270,8 +282,8 @@ class ChemistrySimulator:
             for i in range(batchsize):
                 if batch[i] != "InvalidSMILES":
                     if outfilealreadyexist:
-                        complexoutfile = f"{dockingoutdir}/{df.index[i]}_opt.out"
-                        guestoutfile = f"{conformeroutdir}/{df.index[i]}_opt.out"
+                        complexoutfile = f"{dockingoutdir}/complexopt/{df.index[i]}_opt.out"
+                        guestoutfile = f"{conformeroutdir}/opt/{df.index[i]}_opt.out"
                         bindingenergy = self.binding(binding_choice,
                                                     batch[i],
                                                     batchguest[i],
@@ -282,7 +294,8 @@ class ChemistrySimulator:
                                                     guestoutfile=guestoutfile,
                                                     outdir=finaloutdir
                                                     )
-                        bindingenergies.append({"MolId":df.index[i]}.update(bindingenergy))
+                        bindingenergy.update({"MolId":df.index[i]})
+                        bindingenergies.append(bindingenergy)
                     else:
                         complexmolfinal, guestmolfinal, bindingenergy = self.binding(binding_choice,
                                                     batch[i],
@@ -292,7 +305,8 @@ class ChemistrySimulator:
                                                     inp,
                                                     outdir=finaloutdir
                                                     )
-                        bindingenergies.append({"MolId":df.index[i]}.update(bindingenergy))
+                        bindingenergy.update({"MolId":df.index[i]})
+                        bindingenergies.append(bindingenergy)
                         complexmolfinals.append({"MolId":df.index[i],"dockedmol":complexmolfinal})
                         guestmolfinals.append({"MolId":df.index[i],"guestmol":guestmolfinal})
                 else:
@@ -310,6 +324,7 @@ class ChemistrySimulator:
             bindingenergies.set_index("MolId",inplace=True)
 
             df = pd.concat([df,bindingenergies],axis=1)
+            print(df)
             df.to_pickle(finaloutdir + "/finaldf.pkl")
 
         # DATAFILTER
@@ -344,15 +359,17 @@ class ChemistrySimulator:
         Embed mol object to get 3D structure
         """
         module = importlib.import_module(f"molgen_{method}")
-        mol = module.mol_gen(smiles,molId)
+        try:
+            mol = module.mol_gen(smiles,molId)
+            
+            # Files created:
+            #f"{molId}_rdkit.pdb"
 
-        # Files created:
-        #f"{molId}_rdkit.pdb"
-        #f"{molId}_reduced.pdb"
-
-        # Move files
-        sp.run["mv",f"{molId}_{method}.pdb",f"{outdir}/{molId}_{method}.pdb"]
-        sp.run["mv",f"{molId}_reduced.pdb",f"{outdir}/{molId}_reduced.pdb"]
+            # Move files
+            sp.run(["mv",f"{molId}_{method}.pdb",f"{outdir}/{molId}_{method}.pdb"])
+        
+        except ValueError:
+            mol = "InvalidSMILES"
 
         return mol
 
@@ -369,8 +386,8 @@ class ChemistrySimulator:
         #f"{molId}_opt.pdb"
 
         # Move files
-        sp.run["mv",f"{molId}_opt.out",f"{outdir}/{molId}_opt.out"]
-        sp.run["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"]
+        sp.run(["mv",f"{molId}_opt.out",f"{outdir}/{molId}_opt.out"])
+        sp.run(["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"])
             
         return guestmol
 
@@ -387,12 +404,12 @@ class ChemistrySimulator:
         #f"{molId}_complex.pdb"
 
         # Move files
-        sp.run["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"]
-        sp.run["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"]
+        #sp.run(["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"])
+        sp.run(["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"])
 
         return complexmol
 
-    def binding_energy(self,method,complexmol,guestmol,molId,hostoutfile,inp,**kwargs):
+    def binding(self,method,complexmol,guestmol,molId,hostoutfile,inp,**kwargs):
         """Steps: calculate binding energy
         Get energy breakdown (kwargs could indicate which breakdown to get)
         """
@@ -400,18 +417,18 @@ class ChemistrySimulator:
 
         # Returns dictionary with breakdown of binding energy
         if kwargs["complexoutfile"] and kwargs["guestoutfile"]:
-            bindingdict = module.binding_energy(complexmol,guestmol,molId,hostoutfile,inp,complexoutfile=kwargs["complexoutfile"],guestoutfile=kwargs["guestoutfile"])
+            bindingdict = module.binding(complexmol,guestmol,molId,hostoutfile,inp,complexoutfile=kwargs["complexoutfile"],guestoutfile=kwargs["guestoutfile"])
         else:
-            bindingdict = module.binding_energy(complexmol,guestmol,molId,hostoutfile,inp,outdir=kwargs["outdir"])
+            bindingdict = module.binding(complexmol,guestmol,molId,hostoutfile,inp,outdir=kwargs["outdir"])
 
         return bindingdict
     
-    def check_exclusion_complex(self,complexmol):
+    def check_exclusion_complex(self,complexmol,molId):
         """Steps: check if complex is excluded
         """
-        module = importlib.import_module("exclusion.py")
+        module = importlib.import_module("exclusion")
 
-        isExo, centroid_diff, cavity_atoms = module.exclusion_check(complexmol)
+        isExo, centroid_diff, cavity_atoms = module.exclusion_check(complexmol,molId)
 
         return isExo, centroid_diff, cavity_atoms
 

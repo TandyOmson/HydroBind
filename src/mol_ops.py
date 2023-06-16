@@ -39,6 +39,35 @@ def xyz_to_mol(xyzfile,**resnames):
         
     return mol
 
+def change_complex_resnames(mol,guestresname,hostresname):
+
+    # Setup residue information
+    mi1  =  Chem.AtomPDBResidueInfo()
+    mi1.SetResidueName(hostresname)
+    mi1.SetResidueNumber(1)
+    mi1.SetOccupancy(1.0)
+    mi1.SetTempFactor(0.0)
+    
+    mi2  =  Chem.AtomPDBResidueInfo()
+    mi2.SetResidueName(guestresname)
+    mi2.SetResidueNumber(2)
+    mi2.SetOccupancy(1.0)
+    mi2.SetTempFactor(0.0)
+    
+    # Add residue information to molecule
+    count = 0
+    for a in mol.GetAtoms():
+        if count < CB_ATOM_NUM:
+            a.SetMonomerInfo(mi1)
+            a.SetAtomicNum(a.GetAtomicNum())
+            count+=1
+        elif count >= CB_ATOM_NUM:
+            a.SetMonomerInfo(mi2)
+            a.SetAtomicNum(a.GetAtomicNum())
+            count+=1		
+
+    return mol
+
 def ammend_pdb_spacing(pdbfile):
     """ 
     Modifies pdb file in place to behave with xTB/AMBER
@@ -47,8 +76,9 @@ def ammend_pdb_spacing(pdbfile):
         lines = f.readlines()
     with open(pdbfile,"w") as f:
         # Write header
-        f.write("comment1\n\n")
+        f.write("comment1\n")
         for line in lines:
+            
             species = line.split()[-1]
             f.write(line[:13] + species + "   " + line[13:])
     return

@@ -1,0 +1,13 @@
+name: AmberTools23
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - openbabel
+  - ambertools=22
+  - pandas
+  - rdkit
+  - xtb
+  - pybind11
+  - ipykernel
+prefix: /home/spine/miniconda3/envs/AmberTools23

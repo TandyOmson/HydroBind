@@ -3,6 +3,7 @@
 
 import subprocess as sp
 from rdkit import Chem
+from mol_ops import ammend_pdb_spacing
 
 def opt(mol,molId,inp):
     """ optimises a given molecule using xTB """
@@ -11,6 +12,8 @@ def opt(mol,molId,inp):
     optfile = f"{molId}_opt.pdb"
 
     Chem.MolToPDBFile(mol,f"{infile}")
+    ammend_pdb_spacing(f"{infile}")
+
     print("Command: xtb --input",f"{inp}",f"{infile}","--opt","--alpb","water",">",f"{outfile}")
     sp.run(["xtb","--input",f"{inp}",f"{infile}","--opt","--alpb","water"],stdout=open(outfile,"w"))
     sp.run(["mv","xtbopt.pdb",f"{optfile}"])

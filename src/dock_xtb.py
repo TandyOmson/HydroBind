@@ -21,7 +21,7 @@ def dock(mol,molId,hosttopo,dockoutfile,posefile,inp):
 
     # Read in docked guest
     complextopo = "best.xyz"
-    mol = xyz_to_mol(complextopo)
+    mol = xyz_to_mol(complextopo,guestresname="GUE",hostresname="HOS")
 
     sp.run(["mv",f"{complextopo}",f"{posefile}"])
 

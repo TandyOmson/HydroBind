@@ -6,9 +6,12 @@
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit import RDLogger
 from sklearn.decomposition import PCA
 import numpy as np
-from mol_ops import xyz_to_mol
+from mol_ops import change_complex_resnames, ammend_pdb_spacing
+
+from prog_ops import coords_check
 
 def dock(mol,molId,hostfile,inp):
     """ Dock a molecule into a host"""
@@ -16,15 +19,12 @@ def dock(mol,molId,hostfile,inp):
     dockoutfile = f"{molId}_dock.out"
     posefile = f"{molId}_complex.pdb"
 
-    # Align host and guest axis
-    # Get coordinates of guest
-    mol = Chem.rdmolops.RemoveHs(mol)
-
     guest_atoms = [atm.GetSymbol() for atm in mol.GetAtoms()]
     guest_coords = np.array([mol.GetConformer().GetAtomPosition(atm.GetIdx()) for atm in mol.GetAtoms()])
 
     hostmol = Chem.MolFromPDBFile(hostfile,removeHs=False,sanitize=False)
-    host_coords = np.array([hostmol.GetConformer().GetAtomPosition(atm.GetIdx()) for atm in hostmol.GetAtoms() if atm.GetAtomicNum() != 1])
+    host_atoms = [atm.GetSymbol() for atm in hostmol.GetAtoms()]
+    host_coords = np.array([hostmol.GetConformer().GetAtomPosition(atm.GetIdx()) for atm in hostmol.GetAtoms()])
 
     #add clouds of points around the atoms of the guest molecule, 3 sections in polar (theta) and 6 in azimuthal (phi)
     #This prepares the coordinates for the PCA
@@ -54,41 +54,66 @@ def dock(mol,molId,hostfile,inp):
     pca.fit_transform(guest_coords_with_clouds)
     transform_coord = pca.transform(guest_coords)
 
-    # Centre the transformed coordinates on the host centroid
-    host_centroid = np.mean(host_coords,axis=0)
-    transform_coord_centred = transform_coord - np.mean(transform_coord,axis=0) + host_centroid
+    # Direct the principal axis of the guest molecule towards the z-axis (the axis pointing through the cavity of the host)
+    theta = np.arctan2(transform_coord[0,0],transform_coord[0,2])
+    rotation_matrix = np.array([[np.cos(theta),0,np.sin(theta)],[0,1,0],[-np.sin(theta),0,np.cos(theta)]])
+    transform_coord = np.matmul(rotation_matrix,transform_coord.T).T
 
+    # Centre the transformed coordinates on the host centroid
+    transform_coord_centered = transform_coord.copy()
+    transform_coord_centered[:,0] = transform_coord[:,0] - np.mean(transform_coord[:,0])
+    transform_coord_centered[:,1] = transform_coord[:,1] - np.mean(transform_coord[:,1])
+    transform_coord_centered[:,2] = transform_coord[:,2] - np.mean(transform_coord[:,2])
+    
     # Set molecule coordinates to the transformed coordinates
     for index,atm in enumerate(mol.GetAtoms()):
-            mol.GetConformer().SetAtomPosition(atm.GetIdx(),transform_coord_centred[index])
-            
-    # Add Hs back to the guest
-    mol = Chem.AddHs(mol)
+            mol.GetConformer().SetAtomPosition(atm.GetIdx(),transform_coord_centered[index])
+
+    # Thanks to the symmetric structure of CBs, the only way to change docking pose is a slight rotation around the z-axis if more conformers are required
 
     # Finally combine the host and guest coordinates
-    complexmol = Chem.CombineMols(hostmol,mol)
+    complexmolrdkit = Chem.CombineMols(hostmol,mol)
+
+    complexmolrdkit.UpdatePropertyCache(strict=False)
+    Chem.GetSymmSSSR(complexmolrdkit)
+    complexmolrdkit.GetRingInfo().NumRings()
+
+    # Turn off addHs warnings
+    RDLogger.DisableLog('rdApp.*')
+    AllChem.MMFFOptimizeMolecule(complexmolrdkit, ignoreInterfragInteractions=False, nonBondedThresh=100.0)
+
+    #with open(posefile,'w') as f:
+    #    f.write(f"{len(transform_coord_centered)+len(host_coords)}\n\n")
+    #    for atom,specie in zip(host_coords,host_atoms):
+    #        f.write(f"{specie} {atom[0]} {atom[1]} {atom[2]}\n")
+    #    for atom,specie in zip(transform_coord_centered,guest_atoms):
+    #        f.write(f"{specie} {atom[0]} {atom[1]} {atom[2]}\n")
+
+            
+    #complexmol = Chem.MolFromXYZFile(posefile)
 
     # Converge the molecule
-    n_steps = 1000000
-    tol=1e-8
-    AllChem.MMFFSanitizeMolecule(complexmol)
-    ff = AllChem.MMFFGetMoleculeForceField(complexmol, pyMMFFMolProperties=AllChem.MMFFGetMoleculeProperties(complexmol, mmffVariant='MMFF94', mmffVerbosity = 0), ignoreInterfragInteractions=False, nonBondedThresh=100.0)
-    ff.Initialize()
-    cf = ff.Minimize(maxIts=n_steps,energyTol=tol,forceTol=tol)
-    en = ff.CalcEnergy()
-    with open(dockoutfile,'w') as f:
-        f.write(f"{cf}\n")
-        f.write(f"{en}\n")
+    #n_steps = 1000000
+    #tol=1e-8
+    #AllChem.MMFFSanitizeMolecule(complexmol)
+    #ff = AllChem.MMFFGetMoleculeForceField(complexmol, pyMMFFMolProperties=AllChem.MMFFGetMoleculeProperties(complexmol, mmffVariant='MMFF94', mmffVerbosity = 0), ignoreInterfragInteractions=False, nonBondedThresh=100.0)
+    #ff.Initialize()
+    #cf = ff.Minimize(maxIts=n_steps,energyTol=tol,forceTol=tol)
+    #en = ff.CalcEnergy()
+    #with open(dockoutfile,'w') as f:
+    #    f.write(f"{cf}\n")
+    #    f.write(f"{en}\n")
 
     # Write out the docked molecule
-    Chem.MolToXYZFile(complexmol,"pose.xyz")
+    #complexmol = change_complex_resnames(complexmol,"GUE","HOS")
 
     # Read in docked guest from .xyz file with formatted residues
-    mol = xyz_to_mol("pose.xyz")
-    Chem.MolToPDBFile(mol,posefile)
+    complexmolrdkit = change_complex_resnames(complexmolrdkit,"GUE","HOS")
+    Chem.MolToPDBFile(complexmolrdkit,posefile)
+    ammend_pdb_spacing(posefile)
 
-    return mol
+    return complexmolrdkit
 
 if __name__ == "__main__":
     guestmol = Chem.MolFromPDBFile('7368_opt.pdb',removeHs=False,sanitize=False)
-    complex = dock(guestmol,1,"host.pdb","best.xyz","pose.xyz")
+    complex = dock(guestmol,1,"host.pdb",inp)

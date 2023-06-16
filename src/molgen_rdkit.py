@@ -14,8 +14,10 @@
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdDistGeom
+from rdkit.Chem import rdMolAlign
+
 import pandas as pd
-import subprocess as sp
 
 def mol_gen(smiles, molId):
     """in: smiles string
@@ -23,24 +25,18 @@ def mol_gen(smiles, molId):
     - returns a mol object to append to dictionary
     - runs reduce to massage the structure and verify presence of all hydrogens
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return "InvalidSMILES"
-    else:
-        try:
-            Chem.SanitizeMol(mol)
-            mol = Chem.AddHs(mol)
-            AllChem.EmbedMolecule(mol,useRandomCoords=True,randomSeed=0xf00d,ignoreSmoothingFailures=True,randNegEig=True)
-            AllChem.MMFFOptimizeMolecule(mol, maxIters=200)
-        except ValueError:
-            return "InvalidSMILES"
 
-    guestfile = f"{molId}_rdkit.pdb"
-    guestfile_reduced = f"{molId}_reduced.pdb"
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
 
-    Chem.MolToPDBFile(mol, guestfile)
-    sp.run(["reduce","-build",f"{guestfile}"],stdout=open(guestfile_reduced,"w"))
-    mol = Chem.MolFromPDBFile(guestfile_reduced,removeHs=False,sanitize=False)
+    # Check for validity
+    param = rdDistGeom.ETKDGv2()
+    param.pruneRmsThresh = 0.2
+    rdDistGeom.EmbedMolecule(mol,params=param)
+
+    AllChem.MMFFOptimizeMolecule(mol, mmffVariant="MMFF94s")
+
+    # Write to pdb
+    Chem.MolToPDBFile(mol,f"{molId}_rdkit.pdb")
 
     return mol
 

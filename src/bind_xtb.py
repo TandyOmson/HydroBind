@@ -64,7 +64,7 @@ def get_binding_from_outfile(outfile,molId):
 
     return en_dict
 
-def bind(complexmol,guestmol,molId,hostoutfile,xtbinp,**kwargs):
+def binding(complexmol,guestmol,molId,hostoutfile,xtbinp,**kwargs):
     """ calculates binding affinity of a given complex using xTB
     kwargs include both the optional outdir and optional guestoutfile (output from guest optimisation)
     if notguestoutfile, then the guestpdb is given.
