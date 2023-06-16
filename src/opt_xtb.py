@@ -12,7 +12,9 @@ def opt(mol,molId,inp):
     optfile = f"{molId}_opt.pdb"
 
     Chem.MolToPDBFile(mol,f"{infile}")
-    ammend_pdb_spacing(f"{infile}")
+    # MolToPDBFile formats differently for complexes and single molecules, this is a temporary fix
+    if len(mol.GetAtoms()) > 125:
+        ammend_pdb_spacing(f"{infile}")
 
     print("Command: xtb --input",f"{inp}",f"{infile}","--opt","--alpb","water",">",f"{outfile}")
     sp.run(["xtb","--input",f"{inp}",f"{infile}","--opt","--alpb","water"],stdout=open(outfile,"w"))
