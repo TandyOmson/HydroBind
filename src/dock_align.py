@@ -81,6 +81,8 @@ def dock(mol,molId,hostfile,inp):
     # Turn off addHs warnings
     RDLogger.DisableLog('rdApp.*')
     AllChem.MMFFOptimizeMolecule(complexmolrdkit, ignoreInterfragInteractions=False, nonBondedThresh=100.0)
+    with open(dockoutfile,'w') as f:
+         f.write("NO DOCKING INFO FOR ALIGN METHOD")
 
     #with open(posefile,'w') as f:
     #    f.write(f"{len(transform_coord_centered)+len(host_coords)}\n\n")
@@ -103,11 +105,8 @@ def dock(mol,molId,hostfile,inp):
     #with open(dockoutfile,'w') as f:
     #    f.write(f"{cf}\n")
     #    f.write(f"{en}\n")
-
-    # Write out the docked molecule
-    #complexmol = change_complex_resnames(complexmol,"GUE","HOS")
-
-    # Read in docked guest from .xyz file with formatted residues
+    
+    # Write out docked molecule
     complexmolrdkit = change_complex_resnames(complexmolrdkit,"GUE","HOS")
     Chem.MolToPDBFile(complexmolrdkit,posefile)
     ammend_pdb_spacing(posefile)

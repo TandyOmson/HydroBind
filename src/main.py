@@ -62,7 +62,8 @@ class ConfigManager:
         method = self.config.get(section, "method")
         inp = self.config.get(section, "inputfile")
         dockingoutdir = self.config.get(section, "dockingoutdir")
-        return method, inp, dockingoutdir
+        hostfile = self.config.get(section, "hostfile")
+        return method, inp, dockingoutdir, hostfile
     
     def get_final_outdir(self):
         """ Return final outdir"""
@@ -104,7 +105,7 @@ class ChemistrySimulator:
         conformercheck, bindingposecheck, exclusioncomplexcheck = self.config.get_checks_flags()
 
         # Create list of flags for each step
-        steps = OrderedDict({"molgen":False,"optimisation":False,"docking":False,"complex_opt":False,"binding":False})
+        steps = OrderedDict({"molgen":False,"optimisation":False,"docking":False,"complexopt":False,"binding":False})
         for step in steps:
             if step in stepflags:
                 steps[step] = True
@@ -177,12 +178,10 @@ class ChemistrySimulator:
 
         # DOCKING
         # ================================================================
-        docking_choice, inp, dockingoutdir = self.config.get_docking_config()
+        docking_choice, inp, dockingoutdir, hostfile = self.config.get_docking_config()
         if steps["docking"]:
             starttime = time.time()
             self.config.print_config("DOCKING")
-
-            hostfile = f"{hostdir}/xtbopt.pdb"
 
             # Df starts with index: MolID; columns: PubChemID, SMILES, guestmol
             batch = df["guestmol"].iloc[:batchsize]
@@ -216,7 +215,7 @@ class ChemistrySimulator:
         # COMPLEX OPTIMISATION
         # ================================================================
         opt_choice, inp, hostdir = self.config.get_optimisation_config()
-        if steps["docking"]:
+        if steps["complexopt"]:
             starttime = time.time()
             print("Optimising docked complexes...")
 
@@ -426,7 +425,7 @@ class ChemistrySimulator:
             #f"{molId}_complex.pdb"
 
             # Move files
-            #sp.run(["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"])
+            sp.run(["mv",f"{molId}_dock.out",f"{outdir}/{molId}_dock.out"])
             sp.run(["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"])
             
         except:
