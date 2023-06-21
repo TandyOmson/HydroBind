@@ -17,7 +17,7 @@ def dock(mol,molId,hosttopo,dockoutfile,posefile,inp):
     Chem.MolToPDBFile(mol,guesttopo)
     
     # Dock guest into host
-    sp.run(["xtb","dock",f"{hosttopo}",f"{guesttopo}","--input",f"{inp}","--pocket"],stdout=open(f"{dockoutfile}","w"))
+    sp.run(["xtb","dock",f"{hosttopo}",f"{guesttopo}","--input",f"{inp}","--pocket"],stdout=open(f"{dockoutfile}","w"),stderr=open("xtb.log","w"))
 
     # Read in docked guest
     complextopo = "best.xyz"
@@ -27,6 +27,7 @@ def dock(mol,molId,hosttopo,dockoutfile,posefile,inp):
 
     sp.run(["rm","pocket.xyz"])
     sp.run(["rm",f"{molId}.pdb"])
+    sp.run(["rm","xtb.log"])
 
     return mol
 

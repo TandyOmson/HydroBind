@@ -27,7 +27,7 @@ def dock(mol,molId,hostfile,inp):
     sp.run(["obabel",f"{infile}","-O",f"{pdbqtfile}","-xh"],stderr=open("obabel.log","w"))
 
     # Run Vina
-    sp.run(["vina",f"--config={inp}",f"--ligand={pdbqtfile}",f"--out={posepdbqtfile}"],stdout=open("vina.log","w"))
+    sp.run(["vina",f"--config={inp}",f"--receptor={hostfile}",f"--ligand={pdbqtfile}",f"--out={posepdbqtfile}"],stdout=open("vina.log","w"))
 
     # Revert output .pdbqt to .pdb
     sp.run(["obabel",f"{posepdbqtfile}","-O",f"{dockoutfile}"],stderr=open("obabel.log","a"))
@@ -60,6 +60,7 @@ def dock(mol,molId,hostfile,inp):
 
     # Clean up files not standard to class method
     sp.run(["mv",f"{dockoutfile}",f"{molId}_dock.out"])
+    sp.run(["rm",f"{infile}"])
     sp.run(["rm",f"{pdbqtfile}"])
     sp.run(["rm",f"{posepdbqtfile}"])
     sp.run(["rm","vina.log"])

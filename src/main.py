@@ -196,7 +196,7 @@ class ChemistrySimulator:
                                          batch[i],
                                          df.index[i],
                                          hostfile,
-                                         None,
+                                         inp,
                                          outdir=f"{dockingoutdir}/docked"
                                          )
                     complexes.append({"MolId":df.index[i],"dockedmol":compl})
