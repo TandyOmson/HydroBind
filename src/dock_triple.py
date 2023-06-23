@@ -35,7 +35,7 @@ def dock(mol,molId,hostfile,inp):
     v.set_receptor(rigid_pdbqt_filename=hostfile)
     v.set_ligand_from_file(pdbqtfile)
     
-    v.compute_vina_maps(center=[0,0,0], box_size=[24,24,24])
+    v.compute_vina_maps(center=[0.0,0.0,0.0], box_size=[24.0,24.0,24.0])
     v.optimize()
 
     # Exhaustiveness deterimes the number of MC samples
@@ -45,10 +45,14 @@ def dock(mol,molId,hostfile,inp):
 
     # Run Vina with small box
     v.compute_vina_maps(center=[0,0,0], box_size=[10.780,10.051,10.131])
-    v.optimize()
-    v.dock(exhaustiveness=20, n_poses=10)
-    small_box_ens = v.energies(n_poses=10)
-    v.write_poses(posepdbqtfile[:-6]+"_small.pdbqt",overwrite=True)
+    try:
+        v.optimize()
+        v.dock(exhaustiveness=20, n_poses=10)
+        small_box_ens = v.energies(n_poses=10)
+        v.write_poses(posepdbqtfile[:-6]+"_small.pdbqt",overwrite=True)
+    except:
+        print("Guest does not fit in small box!")
+        sp.run(["touch",f"{posepdbqtfile[:-6]}_small.pdbqt"])
 
     # Revert output .pdbqt to .pdb
     sp.run(["cat",f"{posepdbqtfile[:-6]}_big.pdbqt",f"{posepdbqtfile[:-6]}_small.pdbqt"],stdout=open(f"{posepdbqtfile}","w"))
@@ -77,6 +81,7 @@ def dock(mol,molId,hostfile,inp):
     # Take the best pose from the large or small box
     # If the smaller box retruns an energy within 3 kcal/mol of the larger box, use the smaller box
     if small_box_ens[:,0].min() < big_box_ens[:,0].min() + 3:
+        print("Using small search box for ",molId)
         sp.run(["obabel",f"{posepdbqtfile[:-6]}_small.pdbqt","-O",f"{posefile}"],stderr=open("obabel.log","a"))
         guestmols = Chem.Mol(Chem.MolFromPDBFile(f"{posefile}",removeHs=False,sanitize=False))
         
@@ -103,12 +108,13 @@ def dock(mol,molId,hostfile,inp):
 
     return complexmol
 
-if __name__ == "__main__":
-    import time
-    start = time.time()
-    hostfile = "/home/spine/DProjects/DhydroEn/data/DCB7/host.pdbqt"
-    guestmol = Chem.MolFromPDBFile("7368.pdb",removeHs=False,sanitize=False)
-    inp = None
-    complexmol = dock(guestmol,7368,hostfile,inp)
-    end = time.time()
-    print("time: ",end-start,"s")
+# To move to test
+#if __name__ == "__main__":
+#    import time
+#    start = time.time()
+#    hostfile = "/home/spine/DProjects/DhydroEn/data/DCB7/host.pdbqt"
+#    guestmol = Chem.MolFromPDBFile("7368.pdb",removeHs=False,sanitize=False)
+#    inp = None
+#    complexmol = dock(guestmol,7368,hostfile,inp)
+#   end = time.time()
+#    print("time: ",end-start,"s")

@@ -7,6 +7,12 @@ Returns: Complex molecule object
 import subprocess as sp
 from rdkit import Chem
 from rdkit import RDLogger
+from rdkit.Chem import AllChem
+
+# Import tblite-python module, a python API for singlepoint tight binding calculations (a lightweight energy evaluation)
+#from tblite.interface import Calculator
+#import numpy as np
+
 from mol_ops import change_complex_resnames, ammend_pdb_spacing
 
 def dock(mol,molId,hostfile,inp):
@@ -35,23 +41,53 @@ def dock(mol,molId,hostfile,inp):
     # Disable RDKit logging
     RDLogger.DisableLog('rdApp.*')
 
-    # Extract best conformer (make it only conformer to be compatible with Chem.CombineMols)
+    # Read in all binding poses
     guestmols = Chem.MolFromPDBFile(f"{dockoutfile}",removeHs=False,sanitize=False)
+    hostmol = Chem.MolFromPDBFile(f"{hostfile}",removeHs=False,sanitize=False)
+
+    # Rewrite dockoutfile with hosts included
+    num_confs = guestmols.GetNumConformers()
+    # Make num_confs copies of the conformers in hostmol
+    hostmols = Chem.Mol(hostmol)
+    for i in range(num_confs-1):
+        hostmols.AddConformer(hostmol.GetConformer(),assignId=True)
+
+    # Combine host and guest
+    complexmols = Chem.CombineMols(hostmols,guestmols)
+
+    # Write out docked molecules in all binding poses
+    Chem.MolToPDBFile(complexmols,dockoutfile)
+
+    # TESTINGPHASE: Brief optimisation of all conformers
+    #complexmols.UpdatePropertyCache(strict=False)
+    #Chem.GetSymmSSSR(complexmols)
+    #complexmols.GetRingInfo().NumRings()
+    #
+    #AllChem.MMFFOptimizeMoleculeConfs(complexmols, ignoreInterfragInteractions=False, nonBondedThresh=100.0)
+
+    # TESTINGPHASE: Quick GNF2 singlepoint energy evaluation to score poses
+    # Set as a property of each conformer in complexmols
+    #for i in range(num_confs):
+    #    mol = complexmols.GetConformer(i)
+    #    atomicnums = np.array([atom.GetAtomicNum() for atom in complexmols.GetAtoms()])
+    #    coords = np.array(mol.GetPositions())
+    #
+    #    calc = Calculator("GFN2-xTB", atomicnums, coords)
+    #    res = calc.singlepoint()
+    #    print(res.get("energy"))
+    #
+    #    complexmols.GetConformer(i).SetProp("energy",str(res.get("energy")))
+    #
+    #for c in complexmols.GetConformers():
+    #    print(c.GetProp("energy"))
+
+    # Take only the best pose
     guestmol = Chem.Mol(guestmols)
     guestmol.RemoveAllConformers()
     guestmol.AddConformer(guestmols.GetConformer(),assignId=True)
 
     # Combine host and guest
-    hostmol = Chem.MolFromPDBFile(f"{hostfile}",removeHs=False,sanitize=False)
     complexmol = Chem.CombineMols(hostmol,guestmol)
-
-    # OPTIONAL: Optimse complex (this could be implemented for all conformers as well
-    # requires hostmol to have the same number of copies of conformers as conformers in guestmols before combinemols
-    #complexmol.UpdatePropertyCache(strict=False)
-    #Chem.GetSymmSSSR(complexmol)
-    #complexmol.GetRingInfo().NumRings()
-
-    #AllChem.MMFFOptimizeMolecule(complexmol, ignoreInterfragInteractions=False, nonBondedThresh=100.0)
 
     # Write out docked molecule
     complexmol = change_complex_resnames(complexmol,"GUE","HOS")

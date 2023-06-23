@@ -110,6 +110,8 @@ class ChemistrySimulator:
             if step in stepflags:
                 steps[step] = True
 
+        print("Config setup, starting...\n")
+
         # MOL GENERATION
         # ================================================================
         molgen_choice, conformeroutdir = self.config.get_molgen_config()
@@ -385,6 +387,7 @@ class ChemistrySimulator:
             sp.run(["mv",f"{molId}_{method}.pdb",f"{outdir}/{molId}_{method}.pdb"])
         
         except ValueError:
+            print(f"Molgen error for molecule {molId}")
             mol = "InvalidSMILES"
 
         return mol
@@ -407,6 +410,7 @@ class ChemistrySimulator:
             sp.run(["mv",f"{molId}_opt.pdb",f"{outdir}/{molId}_opt.pdb"])
 
         except:
+            print(f"Optimisation error for molecule: {molId}")
             guestmol = "InvalidSMILES"
             
         return guestmol
@@ -429,6 +433,7 @@ class ChemistrySimulator:
             sp.run(["mv",f"{molId}_complex.pdb",f"{outdir}/{molId}_complex.pdb"])
             
         except:
+            print(f"Docking error for molecule: {molId}")
             complexmol = "InvalidSMILES"
 
         return complexmol
