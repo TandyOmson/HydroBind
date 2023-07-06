@@ -1,4 +1,4 @@
-name: AmberTools23
+name: hydroBind
 channels:
   - conda-forge
   - defaults
@@ -10,4 +10,10 @@ dependencies:
   - xtb
   - pybind11
   - ipykernel
-prefix: /home/spine/miniconda3/envs/AmberTools23
+  - numpy
+  - boost-cpp
+  - sphinx_rtd_theme
+  - sphinx
+  - swig
+  - vina::conda-forge
+prefix: /home/spine/miniconda3/envs/hydroBind
